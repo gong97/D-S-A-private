@@ -156,7 +156,13 @@ def _phase_rule_zh(ctx: Dict[str, Any], phase: str) -> str:
     if phase == "postmarket":
         return "常规交易时段已结束，可以保留完整交易日复盘语义。"
     if phase == "non_trading":
-        return f"当前不是交易日或属于强制运行，只能基于上一完整交易日{date_hint}和已知事件分析，不得伪造今日盘中走势。"
+        # 定时任务周五收盘后跑、落在北京周六凌晨时也是这个阶段；旧文案让模型把「非交易日」
+        # 当成维持观望的理由（2026-11-13 三只的 guardrail_reason 直接引用）
+        return (
+            f"今天休市（周末或节假日），分析面向下一个交易日：只能基于上一完整交易日{date_hint}和已知事件"
+            "生成下一交易日的开盘计划，不得伪造今日盘中走势。休市本身不是看多或看空的理由，"
+            "不得因为是非交易日而调整评分或操作建议。"
+        )
     return "当前市场阶段不可可靠推断，不要补全不存在的盘中或盘前事实，结论需保持保守。"
 
 
@@ -182,8 +188,10 @@ def _phase_rule_en(ctx: Dict[str, Any], phase: str) -> str:
         return "The regular session has ended, so a complete-session recap style is acceptable."
     if phase == "non_trading":
         return (
-            f"This is a non-trading day or forced run. Use the latest complete daily bar{date_hint} and known events; "
-            "do not invent today's intraday movement."
+            f"The market is closed today (weekend or holiday); the analysis is for the next trading session. "
+            f"Use the latest complete daily bar{date_hint} and known events for the next session's opening plan; "
+            "do not invent today's intraday movement. The market being closed is not a bullish or bearish reason "
+            "by itself; do not adjust the score or action because today is a non-trading day."
         )
     return "The market phase cannot be inferred reliably. Do not invent pre-market or intraday facts, and keep conclusions conservative."
 

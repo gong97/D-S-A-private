@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """大盘估值背景（乐咕乐股 legulegu），供大盘复盘使用。
 
-2026-09-30 在 GitHub Actions 上实测 7 个接口全部可达（东方财富在 Actions 上被封）。都是全市场/指数级
+2026-09-30 在 GitHub Actions 上实测 7 个接口全部可达（东方财富在 Actions 上被封），现用其中 6 个。都是全市场/指数级
 数据；这个 akshare 版本已没有单只股票的估值历史接口，所以不用于个股。
 
 每个指标给出最新值和近 10 年历史分位。分位方向不同，渲染时写明：
-PE、PB、总市值/GDP、拥挤度越高越贵（越热）；股债利差、股息率越高越便宜。
+PE、PB、总市值/GDP 越高越贵（越热）；股债利差、股息率越高越便宜。
 每个接口单独限时，取不到的指标直接省略，不影响其余指标和大盘复盘。
 """
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 LOOKBACK_YEARS = 10
 FETCH_TIMEOUT_SECONDS = 12
-# 最新数据距今超过这么多天就不输出：大盘拥挤度 2026-09-30 取到的最新值停在 07-21，
+# 最新数据距今超过这么多天就不输出：大盘拥挤度（已去掉）2026-09-30 取到的最新值停在 07-21，
 # 拿两个多月前的「99% 分位」当今天的背景会误导
 MAX_STALE_DAYS = 14
 
@@ -54,10 +54,10 @@ def _indicators() -> List[_Indicator]:
                    "日期", "总市值", True, unit="%",
                    transform=lambda df: pd.to_numeric(df["总市值"], errors="coerce")
                    / pd.to_numeric(df["GDP"], errors="coerce") * 100),
-        # 拥挤度、股债利差原始值是小数（0.51、0.06），换成百分数显示
-        _Indicator("congestion", "大盘拥挤度", lambda: ak.stock_a_congestion_lg(),
-                   "date", "congestion", True, unit="%",
-                   transform=lambda df: pd.to_numeric(df["congestion"], errors="coerce") * 100),
+        # 大盘拥挤度（ak.stock_a_congestion_lg）已去掉：乐咕乐股对非会员只给约两个半月前的数值，
+        # 之后的日期有行、值为空（vip=False）。2026-09-30 最新到 07-21，11-13 最新到 08-27，
+        # 每次都被 MAX_STALE_DAYS 拦下、只留一条 stale 警告。
+        # 股债利差原始值是小数（0.06），换成百分数显示
         _Indicator("equity_bond_spread", "股债利差（沪深300）", lambda: ak.stock_ebs_lg(),
                    "日期", "股债利差", False, unit="%",
                    transform=lambda df: pd.to_numeric(df["股债利差"], errors="coerce") * 100),

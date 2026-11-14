@@ -354,7 +354,9 @@ jobs:
           ANSPIRE_LLM_MODEL: ${{ vars.ANSPIRE_LLM_MODEL || secrets.ANSPIRE_LLM_MODEL }}
           ANSPIRE_LLM_BASE_URL: ${{ vars.ANSPIRE_LLM_BASE_URL || secrets.ANSPIRE_LLM_BASE_URL }}
           ANSPIRE_LLM_ENABLED: ${{ vars.ANSPIRE_LLM_ENABLED || secrets.ANSPIRE_LLM_ENABLED }}
-          BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
+          # 博查余额已用完（2026-11-13 一次运行失败 36 次，每次都排在最前面先失败再换下一个引擎），
+          # 先不传给任务；secret 保留，充值后恢复这一行即可
+          # BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
           TAVILY_API_KEYS: ${{ secrets.TAVILY_API_KEYS }}
           # 搜索深度：留空即 basic（每次 1 credit）；advanced 每次 2 credits，免费额度减半
           TAVILY_SEARCH_DEPTH: ${{ vars.TAVILY_SEARCH_DEPTH }}

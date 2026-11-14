@@ -76,6 +76,8 @@ class MarketPhasePromptTestCase(unittest.TestCase):
         self.assertIn("非交易日", section)
         self.assertIn("不得伪造今日盘中走势", section)
         self.assertIn("2026-03-26", section)
+        self.assertIn("下一个交易日", section)
+        self.assertIn("不得因为是非交易日而调整评分或操作建议", section)
 
     def test_unknown_phase_and_warnings_are_conservative_without_raw_codes(self):
         section = format_market_phase_prompt_section(
