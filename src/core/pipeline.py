@@ -100,6 +100,7 @@ from src.program_checklist import apply_program_checklist
 from src.chase_guard import current_price_of, strip_chase_buy_points
 from src.tested_signals import annotate_tested_signals
 from src.valuation_red_flags import apply_red_flags, red_flags_for
+from src.rule_actions import apply_rule_action, rule_action_for
 from src.recent_runup import compute_expected_range, compute_recent_runup
 from src.market_evidence import evidence_market
 from src.us_surge_flag import compute_us_surge_flag
@@ -810,6 +811,10 @@ class StockAnalysisPipeline:
             valuation_red_flags = red_flags_for(code)
             if valuation_red_flags:
                 enhanced_context["valuation_red_flags"] = valuation_red_flags
+            # 持仓规则判定（Macd-Qlib 规则操作单，src/rule_actions.py）：操作建议以它为准，不改分
+            rule_action = rule_action_for(code)
+            if rule_action:
+                enhanced_context["rule_action"] = rule_action
             self._attach_daily_market_context(
                 enhanced_context,
                 daily_market_context,
@@ -1534,6 +1539,11 @@ class StockAnalysisPipeline:
             return
         if flagged:
             logger.info("[valuation_red_flags] Attached valuation red flags for %s: %s", code, flagged)
+        # 持仓规则判定挂到 dashboard，总览表单列一栏（src/rule_actions.py）；不改评分和动作
+        try:
+            apply_rule_action(result, rule_action_for(code))
+        except Exception as exc:
+            logger.warning("[rule_actions] %s 处理失败：%s", code, exc)
         # 预期波动区间与「近 5 日涨幅居前」挂到 dashboard，供总览表和卡片显示（agent 路径没有【程序】清单，这里补旗标）
         dashboard = getattr(result, "dashboard", None)
         if isinstance(dashboard, dict):

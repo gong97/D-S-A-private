@@ -24,6 +24,7 @@ from litellm import Router
 
 from src.overheat_flags import render_overheat_flags_prompt
 from src.valuation_red_flags import render_red_flags_prompt
+from src.rule_actions import render_rule_action_prompt
 from src.market_evidence import localize_prompt
 from src.us_surge_flag import render_us_surge_prompt
 from src.us_insider_feed import render_insider_prompt
@@ -3978,6 +3979,11 @@ class GeminiAnalyzer:
         red_flags_section = render_red_flags_prompt(context.get('valuation_red_flags'))
         if red_flags_section:
             prompt += red_flags_section
+
+        # 持仓规则判定（Macd-Qlib 规则操作单，src/rule_actions.py）：操作建议以它为准，评分不因此调整
+        rule_action_section = render_rule_action_prompt(context.get('rule_action'))
+        if rule_action_section:
+            prompt += rule_action_section
 
         # 近 5 日涨幅居前（程序按检验口径算好，src/recent_runup.py）：触发时程序会把「买入」改判为观望
         runup = context.get('recent_runup')

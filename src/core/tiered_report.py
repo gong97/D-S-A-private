@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from src.core.tiered_analysis import ADD_ACTIONS, CUT_ACTIONS, TieredAnalysisOutcome, TieredCandidate
 from src.schemas.decision_action import display_action_fields_for_result, localize_action_label
 from src.utils.sniper_points import extract_sniper_points
+from src.rule_actions import SOURCE as RULE_SOURCE, conflicts as rule_conflicts, short_text as rule_short_text
 
 def _stock_list_notes() -> Dict[str, str]:
     """scripts/holdings_stock_list.py 写的 {6 位代码: 说明}（目前只有「待买回」）；没有就空。"""
@@ -199,6 +200,16 @@ def _summary_action_bucket(result: Any) -> str:
     if action in CUT_ACTIONS:
         return "cut"
     return "hold"
+
+
+def _rule_cell(result: Any, dashboard: Dict[str, Any]) -> str:
+    """规则判定一格；LLM 动作与之方向相反时前面标 ⚠️。"""
+    entry = dashboard.get("rule_action")
+    if not isinstance(entry, dict):
+        return "—"
+    text = rule_short_text(entry)
+    action = display_action_fields_for_result(result)["action"]
+    return f"⚠️ {text}" if rule_conflicts(entry, action) else text
 
 
 def _summary_urgency_marker(dashboard: Dict[str, Any]) -> str:
@@ -399,12 +410,17 @@ def render_decision_summary(
                 "key_price": _summary_key_price(bucket, result, dashboard, current_price),
                 "expected_range": _expected_range_text(dashboard),
                 "urgency": _summary_urgency_marker(dashboard),
+                "rule": _rule_cell(result, dashboard),
+                "rule_entry": dashboard.get("rule_action") if isinstance(dashboard.get("rule_action"), dict) else None,
             }
         )
 
     # 要动的排前面：CUT → ADD → HOLD；组内按评分降序。
     bucket_order = {"cut": 0, "add": 1, "hold": 2}
-    rows.sort(key=lambda r: (bucket_order[r["bucket"]], -r["score"]))
+    # 规则判定要动的（卖出参考 / 减到上限 / 等重新打分）排最前
+    rule_first = {"exit": 0, "trim": 1, "conditional_exit": 2}
+    rows.sort(key=lambda r: (rule_first.get((r["rule_entry"] or {}).get("value"), 3),
+                             bucket_order[r["bucket"]], -r["score"]))
 
     lines: List[str] = [f"# 📋 今日{_list_label()}决策", ""]
 
@@ -413,14 +429,28 @@ def render_decision_summary(
         lines.append(header)
         lines.append("")
 
-    lines.append("| 股票 | 动作 | 现价 | 次日波动区间 | 关键价格 / 风险提示 | 紧迫度 |")
-    lines.append("| --- | --- | --- | --- | --- | --- |")
+    # 规则判定（src/rule_actions.py）：取到才加这一列
+    entries = [r["rule_entry"] for r in rows if r["rule_entry"]]
+    if entries:
+        lines.append("| 股票 | 规则判定 | LLM 动作 | 现价 | 次日波动区间 | 关键价格 / 风险提示 | 紧迫度 |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+    else:
+        lines.append("| 股票 | 动作 | 现价 | 次日波动区间 | 关键价格 / 风险提示 | 紧迫度 |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
     for row in rows:
+        rule = f"{row['rule']} | " if entries else ""
         lines.append(
-            f"| {row['name']} {row['code']} | {row['action_label']} | "
+            f"| {row['name']} {row['code']} | {rule}{row['action_label']} | "
             f"{row['current_price']} | {row['expected_range']} | {row['key_price']} | {row['urgency']} |"
         )
     lines.append("")
+    if entries:
+        first = entries[0]
+        lines.append(
+            f"> 📌 「规则判定」来自 {RULE_SOURCE}（{first.get('date')} 开盘用，依据 {first.get('score_date')} 收盘），"
+            "按研究台账里检验成立的规则算出，操作以它为准。「LLM 动作」只当描述：LLM 评分扣掉近期涨跌后没有检验出信息"
+            "（Macd-Qlib-Analyzer dsa-score-forward 前瞻复核中）。标 ⚠️ 的是两者方向相反。"
+        )
     for note in range_notes([_dashboard_of(r) for r in results]):
         lines.append(f"> ℹ️ {note}")
     pending = [f"{r['name'].replace(' ·待买回', '')}：{notes[_note_key(r['code'])]}"
