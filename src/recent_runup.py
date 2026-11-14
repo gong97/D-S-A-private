@@ -26,6 +26,8 @@ A 股（2026-11-10 起）改用 HAR 宽度 = 近 5 / 20 / 60 日 ATR 的平均�
 1 天）。美股（2026-11-10 起）同样用 HAR：US-stock-macd-analyzer scripts/replicate_atr_har.py（台账 atr-har-us，
 2016~2026 broad_pit 300 只）复现成立——QLIKE 好约 7%（t 12.1，39/40 季度为正），时序差距 6.4 → 1.3 个百分点，
 成交额最大的五分之一也成立；历史超出率约 24.7%。其他市场没有检验，仍用 ATR20。
+
+字段契约：Macd-Qlib-Analyzer 的 tests/test_dsa_contract.py 列出了这个模块读的字段并盯住生产端；改这里读的字段名要同步改那边。
 """
 
 from __future__ import annotations

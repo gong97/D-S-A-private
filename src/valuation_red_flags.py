@@ -31,6 +31,8 @@ A 股那次检验没在美股复现过）。
 build_red_flags.py 生成，Claude 每个工作日估值 1 只），按 ticker 查（BRK.B 与报告里的 BRK-B 视为同一只）。
 同一个 token，需要在 fine-grained PAT 的仓库权限里加上 US-stock-macd-analyzer；没加时美股这段跳过。
 本地调试用 US_VALUATION_RED_FLAGS_FILE。
+
+字段契约：Macd-Qlib-Analyzer 的 tests/test_dsa_contract.py 列出了这个模块读的字段并盯住生产端；改这里读的字段名要同步改那边。
 """
 
 from __future__ import annotations

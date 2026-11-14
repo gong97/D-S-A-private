@@ -24,6 +24,8 @@
 
 数据来源与隐私：与 src/valuation_red_flags.py 相同，只读 token（VALUATION_RED_FLAGS_TOKEN 或 MACD_QLIB_READ_TOKEN）
 走 GitHub API，没有 token 时整段跳过。本地调试用 RULE_ACTIONS_FILE 指向一份本地 json。只用于 A 股。
+
+字段契约：Macd-Qlib-Analyzer 的 tests/test_dsa_contract.py 列出了这个模块读的字段并盯住生产端；改这里读的字段名要同步改那边。
 """
 
 from __future__ import annotations

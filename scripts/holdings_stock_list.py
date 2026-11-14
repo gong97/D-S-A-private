@@ -26,6 +26,8 @@ stdout 一行逗号分隔的代码（持仓按仓位从大到小，再接待买�
 总览表据此标「待买回」。名单少于 MIN_STOCKS 只或任何一份取不到就退出码 1——工作流沿用 STOCK_LIST 变量，不静默。
 
     python scripts/holdings_stock_list.py --notes-out data/stock_list_notes.json
+
+字段契约：Macd-Qlib-Analyzer 的 tests/test_dsa_contract.py 列出了这个模块读的字段并盯住生产端；改这里读的字段名要同步改那边。
 """
 
 from __future__ import annotations

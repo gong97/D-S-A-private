@@ -10,6 +10,8 @@ Macd-Qlib-Analyzer（私有）的 release `local-feeds`（该仓库 fetch_local_
 
 index.json 的 key 是 feed URL，或 "pboc_omo"（央行公开市场操作，已整理成 RSS）。超过 MAX_AGE_HOURS 的视为
 没有（本机没开或任务没跑），调用方照常跳过。
+
+字段契约：Macd-Qlib-Analyzer 的 tests/test_dsa_contract.py 列出了这个模块读的字段并盯住生产端；改这里读的字段名要同步改那边。
 """
 
 from __future__ import annotations
