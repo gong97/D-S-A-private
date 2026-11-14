@@ -1502,7 +1502,7 @@ class StockAnalysisPipeline:
 
     def _strip_chase_buy_points(self, result: Any, code: str) -> None:
         """展示层的兜底，两条分析路径共用：删追涨型买点（src/chase_guard.py），给已检验无效的
-        看多理由加标注（src/tested_signals.py），挂上估值报告质量红旗（src/valuation_red_flags.py）。"""
+        看多理由与看空的技术理由加标注（src/tested_signals.py），挂上估值报告质量红旗（src/valuation_red_flags.py）。"""
         try:
             removed = strip_chase_buy_points(
                 result,
@@ -1514,7 +1514,7 @@ class StockAnalysisPipeline:
             return
         if removed:
             logger.info("[chase_guard] Removed chase-type entries for %s: %s", code, removed)
-        # 看多理由标注历史检验结论（只标注、不改分），见 src/tested_signals.py
+        # 看多理由与看空的技术理由标注历史检验结论（只标注、不改分），见 src/tested_signals.py
         try:
             annotated = annotate_tested_signals(
                 result,
@@ -1525,7 +1525,7 @@ class StockAnalysisPipeline:
             logger.warning("[tested_signals] %s 处理失败：%s", code, exc)
             return
         if annotated:
-            logger.info("[tested_signals] Annotated bullish reasons for %s: %s", code, annotated)
+            logger.info("[tested_signals] Annotated tested reasons for %s: %s", code, annotated)
         # 估值报告质量红旗：报告里单列，模型仍打 ✅「无重大利空」时改 ⚠️（src/valuation_red_flags.py）
         try:
             flagged = apply_red_flags(result, red_flags_for(code))

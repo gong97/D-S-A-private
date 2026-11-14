@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""给模型写的看多理由标注历史检验结论：已检验过、在 A 股上没有优势或方向相反的理由，后面加一句说明。
+"""给模型写的看多理由（以及 2026-11-14 起看空的技术理由）标注历史检验结论：已检验过、在 A 股上没有优势或方向相反的理由，后面加一句说明。
 
 为什么
 ------
@@ -54,14 +54,33 @@ _US_RULES: Tuple[Tuple[Pattern[str], str], ...] = (
     (re.compile(r"突破|头肩底|双底|W底|杯柄|旗形|三角形整理"), "形态与突破在美股没有方向信息"),
     (re.compile(r"低估|估值(?:偏低|较低|便宜|有吸引力|具吸引力|吸引)|便宜"), "美股估值最便宜一组不跑赢"),
 )
+# 看空的技术理由（2026-11-14 起）：11-13 那次 33 只里 31 只「观望」，理由几乎都是空头排列；
+# signal_log 9-30~11-13 里模型评分与过去 20 日涨跌秩相关 +0.54，扣掉过去 5 / 20 日涨跌后对之后 10 日
+# 几乎没有信息（秩相关 0.23 → 0.03）。看空这一侧同样没有检验支持：
+#     A 股  reversal-flow-robustness：跌得最多的 20% 之后不反弹也不继续跑输；momentum-12-1：输家组 t 0.35；
+#           risk-rules：200 日均线 / 回撤止损不改善结果
+#     美股  risk-rules-us：200 日均线 / 回撤止损不成立
+_BEARISH_PATTERN = re.compile(
+    r"空头排列|均线空头|空头均线|弱势空头|跌破(?:关键)?(?:均线|MA\d+|\d+\s*日(?:均)?线)"
+    r"|(?:趋势|走势)(?:走弱|转弱|向下|恶化)|下降(?:趋势|通道)"
+)
+_BEARISH_RULES: Tuple[Tuple[Pattern[str], str], ...] = (
+    (_BEARISH_PATTERN, "空头排列 / 跌破均线之后不继续跑输，不作减仓或卖出依据"),
+)
+_US_BEARISH_RULES: Tuple[Tuple[Pattern[str], str], ...] = (
+    (_BEARISH_PATTERN, "美股均线 / 趋势止损不成立，不作减仓或卖出依据"),
+)
 _TAG_OPEN, _TAG_CLOSE = "〔历史检验：", "〕"
 _MAX_NOTES = 2
 
 
-def tested_notes(text: Any, market: Optional[str] = "cn") -> List[str]:
+def tested_notes(text: Any, market: Optional[str] = "cn", *, bearish: bool = False) -> List[str]:
     if not isinstance(text, str) or not text.strip():
         return []
-    rules = _US_RULES if market == "us" else _RULES
+    if bearish:
+        rules = _US_BEARISH_RULES if market == "us" else _BEARISH_RULES
+    else:
+        rules = _US_RULES if market == "us" else _RULES
     notes: List[str] = []
     for pattern, note in rules:
         if pattern.search(text) and note not in notes:
@@ -69,18 +88,18 @@ def tested_notes(text: Any, market: Optional[str] = "cn") -> List[str]:
     return notes[:_MAX_NOTES]
 
 
-def annotate(text: Any, market: Optional[str] = "cn") -> Any:
-    """命中规则就在末尾加〔历史检验：…〕；已标注过、或不命中，原样返回。"""
+def annotate(text: Any, market: Optional[str] = "cn", *, bearish: bool = False) -> Any:
+    """命中规则就在末尾加〔历史检验：…〕；已标注过、或不命中，原样返回。bearish=True 用看空规则。"""
     if not isinstance(text, str) or _TAG_OPEN in text:
         return text
-    notes = tested_notes(text, market)
+    notes = tested_notes(text, market, bearish=bearish)
     if not notes:
         return text
     return f"{text.rstrip()} {_TAG_OPEN}{'；'.join(notes)}{_TAG_CLOSE}"
 
 
 def annotate_tested_signals(result: Any, language: str = "zh", market: Optional[str] = "cn") -> List[str]:
-    """就地标注 dashboard 里的看多理由，返回改动过的字段名。只做中文（规则是中文关键词）。
+    """就地标注 dashboard 里的看多理由和看空的技术理由，返回改动过的字段名。只做中文（规则是中文关键词）。
 
     market：'cn' 用 A 股规则，'us' 用美股规则，其他市场（没有检验）不标注。
     """
@@ -98,6 +117,11 @@ def annotate_tested_signals(result: Any, language: str = "zh", market: Optional[
         if new != old:
             attribution["strongest_bullish_signal"] = new
             changed.append("signal_attribution.strongest_bullish_signal")
+        old = attribution.get("strongest_bearish_signal")
+        new = annotate(old, market, bearish=True)
+        if new != old:
+            attribution["strongest_bearish_signal"] = new
+            changed.append("signal_attribution.strongest_bearish_signal")
 
     intel = dashboard.get("intelligence")
     catalysts = intel.get("positive_catalysts") if isinstance(intel, dict) else None
@@ -110,11 +134,19 @@ def annotate_tested_signals(result: Any, language: str = "zh", market: Optional[
     battle = dashboard.get("battle_plan")
     checklist = battle.get("action_checklist") if isinstance(battle, dict) else None
     if isinstance(checklist, list):
-        # 只标模型自己打 ✅ 的【模型】项：⚠️/❌ 已经是在提示风险，【程序】项本身就是检验口径
-        new_list = [
-            annotate(item, market) if isinstance(item, str) and "【模型】" in item and item.lstrip().startswith("✅") else item
-            for item in checklist
-        ]
+        # 只标模型自己写的【模型】项：✅ 项按看多规则，⚠️/❌ 项按看空的技术规则（空头排列、跌破均线等）；
+        # 【程序】项本身就是检验口径
+        def _checklist_item(item: Any) -> Any:
+            if not isinstance(item, str) or "【模型】" not in item:
+                return item
+            head = item.lstrip()
+            if head.startswith("✅"):
+                return annotate(item, market)
+            if head.startswith(("⚠️", "⚠", "❌")):
+                return annotate(item, market, bearish=True)
+            return item
+
+        new_list = [_checklist_item(item) for item in checklist]
         if new_list != checklist:
             battle["action_checklist"] = new_list
             changed.append("battle_plan.action_checklist")

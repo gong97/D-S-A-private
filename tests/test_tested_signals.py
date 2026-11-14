@@ -56,3 +56,35 @@ def test_annotate_dashboard_fields_only_model_checks_with_tick() -> None:
 def test_non_chinese_reports_are_left_alone() -> None:
     result = SimpleNamespace(dashboard={"signal_attribution": {"strongest_bullish_signal": "均线多头排列"}})
     assert annotate_tested_signals(result, "en") == []
+
+
+def test_bearish_technical_reasons_are_annotated() -> None:
+    """看空的技术理由（2026-11-14 起）：例句取自 2026-11-13 日报。"""
+    note = "空头排列 / 跌破均线之后不继续跑输，不作减仓或卖出依据"
+    assert tested_notes("均线呈空头排列，短期趋势偏弱", bearish=True) == [note]
+    assert tested_notes("股价跌破MA20支撑", bearish=True) == [note]
+    assert tested_notes("跌破 60 日均线，趋势转弱", bearish=True) == [note]
+    assert tested_notes("三季报增收不增利，毛利率连续下行", bearish=True) == []
+    assert tested_notes("均线呈空头排列", market="us", bearish=True) == ["美股均线 / 趋势止损不成立，不作减仓或卖出依据"]
+    # 看多规则不受影响
+    assert tested_notes("均线呈空头排列") == []
+
+
+def test_bearish_fields_and_warning_checks_are_annotated() -> None:
+    result = SimpleNamespace(dashboard={
+        "signal_attribution": {"strongest_bullish_signal": "回购进展", "strongest_bearish_signal": "均线空头排列"},
+        "battle_plan": {"action_checklist": [
+            "❌ 【模型】空头排列，趋势走弱",
+            "⚠️ 【模型】三季报经营现金流偏弱",
+            "❌ 【程序】近期高管减持：未触发",
+        ]},
+    })
+    changed = annotate_tested_signals(result)
+    dash = result.dashboard
+    assert "signal_attribution.strongest_bearish_signal" in changed
+    assert dash["signal_attribution"]["strongest_bearish_signal"].endswith("不作减仓或卖出依据〕")
+    assert dash["signal_attribution"]["strongest_bullish_signal"] == "回购进展"
+    checks = dash["battle_plan"]["action_checklist"]
+    assert checks[0].endswith("不作减仓或卖出依据〕")
+    assert checks[1] == "⚠️ 【模型】三季报经营现金流偏弱"
+    assert checks[2] == "❌ 【程序】近期高管减持：未触发"
