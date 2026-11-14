@@ -10,7 +10,9 @@
 
 - 写进提示词，要求操作建议以它为准（规则看不到的新事件除外，且要写明是哪件事）；评分不因此调整；
 - 总览表「今日持仓决策」加一列「规则判定」，LLM 动作与之相反时标出来；
-- 不改评分、不改模型的动作（展示层只标注），由用户按规则操作单执行。
+- 不改评分、不改模型的动作（展示层只标注），由用户按规则操作单执行；
+- 「建议仓位」换成规则操作单的仓位上限（2026-11-14 起）：模型的「建议仓位：X 成」没有任何计算口径，也不知道
+  实际持仓；上限 = policy.max_worst_year_drag ÷ |一年内最深跌幅|（Macd-Qlib scripts/portfolio_scan.py）。
 
 文件结构（Macd-Qlib-Analyzer scripts/portfolio_rules.py 生成，日报 CI 约北京时间 23:30 提交）
 -------------------------------------------------------------------------------------
@@ -127,6 +129,14 @@ def _digits(code: Any) -> str:
     return m.group(0) if m else ""
 
 
+def _num(value: Any) -> Optional[float]:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out == out else None  # NaN 当没有
+
+
 def _age_days(day: str, today: Optional[date] = None) -> Optional[int]:
     try:
         d = datetime.strptime(day, "%Y-%m-%d").date()
@@ -162,6 +172,9 @@ def rule_action_for(code: Any, today: Optional[date] = None) -> Optional[Dict[st
         "hints": [str(x) for x in row.get("hints") or [] if str(x).strip()],
         "shares": row.get("shares") or row.get("max_shares") or 0,
         "limit": row.get("limit"),
+        "cap": _num(row.get("cap")),
+        "weight": _num(row.get("weight")) if kind == "holding" else None,
+        "max_shares": int(row.get("max_shares") or 0) if kind == "watch" else 0,
         "declined": declined,
         "date": payload.get("date", ""), "score_date": payload.get("score_date", ""),
         "source": SOURCE,
@@ -204,13 +217,49 @@ def short_text(entry: Optional[Dict[str, Any]]) -> str:
     return text
 
 
+def _pct(x: Optional[float]) -> str:
+    return f"{x:.1%}" if x is not None else "—"
+
+
+def position_text(entry: Optional[Dict[str, Any]]) -> str:
+    """替换模型「建议仓位」的一句：规则上限、当前仓位和当天该怎么做。"""
+    if not entry:
+        return ""
+    value, cap = entry["value"], entry.get("cap")
+    if entry["kind"] == "holding":
+        now = f"当前 {_pct(entry.get('weight'))}"
+        if value == "exit":
+            text = f"规则：卖出参考，目标 0%（{now}）"
+        elif value == "conditional_exit":
+            text = f"规则：等重新打分，暂不加仓（{now}）"
+        elif value == "unknown":
+            text = f"规则未判定（{now}），不加仓"
+        elif cap is None:
+            text = f"上限未算出（{now}），不加仓"
+        elif value == "trim":
+            text = f"上限 {_pct(cap)}，{now}，减到上限需卖 {int(entry.get('shares') or 0):,} 股"
+        else:
+            room = "已到上限，不加仓" if (entry.get("weight") or 0) >= cap else "可加到上限"
+            text = f"上限 {_pct(cap)}，{now}，{room}"
+    else:
+        if value == "buy" and cap is not None:
+            limit = f"，限价 {entry['limit']}" if entry.get("limit") else ""
+            text = f"上限 {_pct(cap)}，最多 {int(entry.get('max_shares') or 0):,} 股{limit}"
+        else:
+            text = f"规则：{entry['label']}，不建仓"
+    if entry.get("declined"):
+        text += "（已决定暂不执行）"
+    return f"{text}〔{SOURCE} {entry.get('date', '')}〕"
+
+
 def render_rule_action_prompt(entry: Optional[Dict[str, Any]]) -> str:
     """提示词段落：规则判定作为操作建议的基准。"""
     if not entry:
         return ""
     scope = "持仓" if entry["kind"] == "holding" else "关注名单（未持有）"
     lines = [f"\n### 持仓规则判定（{SOURCE}，{entry['date']} 开盘用，依据 {entry['score_date']} 收盘）",
-             f"- {scope}判定：**{entry['label']}**" + (f"（{entry['why']}）" if entry["why"] else "")]
+             f"- {scope}判定：**{entry['label']}**" + (f"（{entry['why']}）" if entry["why"] else ""),
+             f"- 仓位：{position_text(entry).split('〔')[0]}"]
     if entry["exits"]:
         lines.append(f"- 触发的规则：{'、'.join(entry['exits'])}")
     for hint in entry["hints"][:3]:
@@ -222,15 +271,24 @@ def render_rule_action_prompt(entry: Optional[Dict[str, Any]]) -> str:
         "**操作建议以它为准**：判「不动」时不要因为技术面给减仓 / 卖出；判「卖出参考」「减到上限」时不要给买入 / 加仓；"
         "关注名单判「不买」「等重新打分」时不要给买入。只有出现规则看不到的新事件（立案、处罚、重大公告、业绩大幅变脸等）"
         "才可以给出不同的结论，并在理由里写明是哪件事。**评分按你自己的分析打，不要因为这一段调高或调低。**"
-        "报告的总览表会单列「规则判定」。"
+        "报告的总览表会单列「规则判定」，「建议仓位」会由程序换成上面的仓位上限。"
     )
     return "\n".join(lines) + "\n"
 
 
 def apply_rule_action(result: Any, entry: Optional[Dict[str, Any]]) -> bool:
-    """挂到 dashboard 供总览表显示；不改评分和动作。"""
+    """挂到 dashboard 供总览表显示，「建议仓位」换成规则上限；不改评分和动作。"""
     dashboard = getattr(result, "dashboard", None)
     if not entry or not isinstance(dashboard, dict):
         return False
     dashboard["rule_action"] = entry
+    battle = dashboard.get("battle_plan")
+    if not isinstance(battle, dict):
+        battle = {}
+        dashboard["battle_plan"] = battle
+    strategy = battle.get("position_strategy")
+    if not isinstance(strategy, dict):
+        strategy = {}
+        battle["position_strategy"] = strategy
+    strategy["suggested_position"] = position_text(entry)
     return True

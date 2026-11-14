@@ -124,3 +124,33 @@ def test_summary_without_rule_actions_keeps_old_columns():
     summary = render_decision_summary(TieredAnalysisOutcome(lite_results=[_lite("300750", "宁德时代", "hold", 50, {})]))
     assert "| 股票 | 动作 | 现价 |" in summary
     assert "规则判定" not in summary
+
+
+def test_position_text_uses_rule_cap():
+    payload = json.loads(json.dumps(PAYLOAD))
+    payload["holdings"][0]["cap"] = 0.202
+    payload["holdings"][2]["cap"] = 0.25
+    payload["watch"][1]["code"] = "601899"
+    payload["watch"][1].update(cap=0.155, max_shares=6600, limit=32.82)
+    texts = {}
+    import os
+    path = os.environ[ra.ENV_FILE]
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+    ra.reset_cache()
+    for code in ("300750", "002044", "600900", "002080", "601899"):
+        texts[code] = ra.position_text(ra.rule_action_for(code, TODAY))
+    assert texts["300750"].startswith("上限 20.2%，当前 20.4%，已到上限，不加仓〔Macd-Qlib 规则操作单 2026-11-16〕")
+    assert texts["002044"].startswith("规则：卖出参考，目标 0%（当前 1.5%）（已决定暂不执行）")
+    assert texts["600900"].startswith("上限 25.0%，当前 30.0%，减到上限需卖 3,000 股")
+    assert texts["002080"].startswith("规则：不买，不建仓")
+    assert texts["601899"].startswith("上限 15.5%，最多 6,600 股，限价 32.82")
+    assert ra.position_text(None) == ""
+
+
+def test_apply_replaces_model_position_and_old_file_without_cap():
+    result = SimpleNamespace(dashboard={"battle_plan": {"position_strategy": {"suggested_position": "建议仓位：5成"}}})
+    assert ra.apply_rule_action(result, ra.rule_action_for("300750", TODAY))  # 旧文件没有 cap
+    assert result.dashboard["battle_plan"]["position_strategy"]["suggested_position"].startswith(
+        "上限未算出（当前 20.4%），不加仓")
+    assert "仓位：上限未算出" in ra.render_rule_action_prompt(ra.rule_action_for("300750", TODAY))
