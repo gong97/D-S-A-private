@@ -11,6 +11,7 @@
 """
 
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -494,6 +495,15 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
             if data_list:
                 for item in data_list:
+                    # 点位或涨跌幅不是有效数字的不列（2026-11-17 报告出过 nan%），也不进平均涨跌幅
+                    try:
+                        valid = math.isfinite(float(item['current'])) and math.isfinite(float(item['change_pct']))
+                    except (KeyError, TypeError, ValueError):
+                        valid = False
+                    if not valid:
+                        logger.warning("[大盘] %s 指数 %s 行情无效（current=%s, change_pct=%s），不列入",
+                                       self._log_context(), item.get('name'), item.get('current'), item.get('change_pct'))
+                        continue
                     index = MarketIndex(
                         code=item['code'],
                         name=item['name'],

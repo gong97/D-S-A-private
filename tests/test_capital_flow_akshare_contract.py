@@ -54,12 +54,13 @@ class TestAkshareCallSignature(unittest.TestCase):
             self.skipTest("akshare not installed")
 
         # Exactly the kwargs the adapter sends.
-        inspect.signature(ak.stock_individual_fund_flow).bind(
-            stock="600519", market="sh"
-        )
-        inspect.signature(ak.stock_sector_fund_flow_rank).bind(
-            indicator="今日", sector_type="行业资金流"
-        )
+        # akshare 1.20.45 renamed stock_individual_fund_flow(stock, ...) -> stock_fund_flow_individual_hist_em(symbol, ...)
+        if hasattr(ak, "stock_fund_flow_individual_hist_em"):
+            inspect.signature(ak.stock_fund_flow_individual_hist_em).bind(symbol="600519", market="sh")
+        else:
+            inspect.signature(ak.stock_individual_fund_flow).bind(stock="600519", market="sh")
+        sector = getattr(ak, "stock_fund_flow_sector_rank_em", None) or ak.stock_sector_fund_flow_rank
+        inspect.signature(sector).bind(indicator="今日", sector_type="行业资金流")
 
     def test_adapter_passes_market_argument(self) -> None:
         """Regression: a SZ code must not be queried with the default market='sh'."""
@@ -74,10 +75,19 @@ class TestAkshareCallSignature(unittest.TestCase):
             adapter.get_capital_flow("000001")
 
         # calls[0] is the per-stock probe; calls[1] is the sector ranking probe.
-        func_name, kwargs = calls[0][0]
-        self.assertEqual(func_name, "stock_individual_fund_flow")
-        self.assertEqual(kwargs, {"stock": "000001", "market": "sz"})
-        self.assertNotIn("symbol", kwargs)
+        # New name first (symbol=), old name second (stock=); both carry the market.
+        self.assertEqual(calls[0], [
+            ("stock_fund_flow_individual_hist_em", {"symbol": "000001", "market": "sz"}),
+            ("stock_individual_fund_flow", {"stock": "000001", "market": "sz"}),
+        ])
+
+    def test_missing_functions_are_reported_not_silent(self) -> None:
+        """2026-11: the old name vanished in akshare 1.20.45 and getattr() skipped it with no error."""
+        adapter = AkshareFundamentalAdapter()
+        with patch.dict("sys.modules", {"akshare": object()}):
+            df, source, errors = adapter._call_df_candidates([("no_such_fn", {}), ("no_such_fn_2", {})])
+        self.assertIsNone(df)
+        self.assertEqual(errors, ["akshare_function_missing:no_such_fn|no_such_fn_2"])
 
 
 class TestFailureIsNotReportedAsUnsupported(unittest.TestCase):

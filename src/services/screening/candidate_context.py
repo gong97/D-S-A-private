@@ -254,7 +254,10 @@ def fetch_stock_fund_flow_summary(code: str) -> str:
     market = _market_for_code(code)
     if not market:
         return ""
-    df = ak.stock_individual_fund_flow(stock=str(code).zfill(6), market=market)
+    from data_provider.ak_compat import ak_api
+
+    # 1.20.45 改名后第一个参数 stock → symbol，按位置传两个版本都认
+    df = ak_api(ak, "stock_fund_flow_individual_hist_em")(str(code).zfill(6), market=market)
     if df is None or df.empty:
         return ""
     row = df.iloc[-1]

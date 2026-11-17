@@ -140,7 +140,7 @@ def test_akshare_call_with_timeout_reaps_timed_out_worker_process() -> None:
 @pytest.mark.parametrize(
     ("method_name", "api_name", "call_name"),
     [
-        ("_fetch_stock_data_sina", "stock_zh_a_daily", "ak.stock_zh_a_daily"),
+        ("_fetch_stock_data_sina", "stock_zh_a_hist_sina", "ak.stock_zh_a_hist_sina"),
         ("_fetch_stock_data_tx", "stock_zh_a_hist_tx", "ak.stock_zh_a_hist_tx"),
     ],
 )
@@ -216,7 +216,7 @@ def test_eastmoney_history_call_uses_timeout_wrapper(monkeypatch) -> None:
         return pd.DataFrame({"日期": ["2026-10-19"], "收盘": [10.2]})
 
     fake_api_func = object()
-    monkeypatch.setitem(sys.modules, "akshare", SimpleNamespace(stock_zh_a_hist=fake_api_func))
+    monkeypatch.setitem(sys.modules, "akshare", SimpleNamespace(stock_zh_a_hist_em=fake_api_func))
     monkeypatch.setattr("data_provider.akshare_fetcher._akshare_call_with_timeout", fake_call)
 
     fetcher = AkshareFetcher(sleep_min=0, sleep_max=0)
@@ -224,7 +224,7 @@ def test_eastmoney_history_call_uses_timeout_wrapper(monkeypatch) -> None:
     df = fetcher._fetch_stock_data_em("002111", "2026-04-02", "2026-10-19")
 
     assert captured["func"] is fake_api_func and captured["timeout"] == 7
-    assert captured["call_name"] == "ak.stock_zh_a_hist"
+    assert captured["call_name"] == "ak.stock_zh_a_hist_em"
     assert captured["kwargs"] == {"symbol": "002111", "period": "daily", "start_date": "20260402",
                                   "end_date": "20261019", "adjust": "qfq"}
     assert not df.empty

@@ -163,7 +163,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
 
         self.assertTrue(all(quote is not None for quote in quotes))
         ak_mock.stock_hk_spot_em.assert_called_once()
-        ak_mock.stock_hk_spot.assert_not_called()
+        ak_mock.stock_hk_spot_sina.assert_not_called()
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_em_failure_falls_back_to_spot(self, mock_cb):
@@ -171,7 +171,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
         ak_mock.stock_hk_spot_em.side_effect = Exception("接口异常：数据源不可用")
-        ak_mock.stock_hk_spot.return_value = _make_spot_df()
+        ak_mock.stock_hk_spot_sina.return_value = _make_spot_df()
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
@@ -179,7 +179,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
         self.assertIsNotNone(quote)
         self.assertEqual(quote.name, "腾讯控股")
         self.assertAlmostEqual(quote.price, 368.0)
-        ak_mock.stock_hk_spot.assert_called_once()
+        ak_mock.stock_hk_spot_sina.assert_called_once()
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_parallel_em_failure_reuses_negative_cache_before_fallback(self, mock_cb):
@@ -193,7 +193,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
             raise Exception("东方财富接口超时")
 
         ak_mock.stock_hk_spot_em.side_effect = delayed_em_failure
-        ak_mock.stock_hk_spot.return_value = pd.concat(
+        ak_mock.stock_hk_spot_sina.return_value = pd.concat(
             [_make_spot_df().assign(代码=code) for code in codes],
             ignore_index=True,
         )
@@ -212,7 +212,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
 
         self.assertTrue(all(quote is not None for quote in quotes))
         ak_mock.stock_hk_spot_em.assert_called_once()
-        self.assertEqual(ak_mock.stock_hk_spot.call_count, len(codes))
+        self.assertEqual(ak_mock.stock_hk_spot_sina.call_count, len(codes))
         self.assertEqual(akshare_fetcher_module._hk_realtime_cache["last_result"], "failure")
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
@@ -221,7 +221,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
         ak_mock.stock_hk_spot_em.side_effect = Exception("东方财富接口超时")
-        ak_mock.stock_hk_spot.side_effect = Exception("新浪接口超时")
+        ak_mock.stock_hk_spot_sina.side_effect = Exception("新浪接口超时")
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
@@ -234,7 +234,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
         ak_mock.stock_hk_spot_em.return_value = pd.DataFrame(columns=['代码', '名称', '最新价'])
-        ak_mock.stock_hk_spot.return_value = _make_spot_df()
+        ak_mock.stock_hk_spot_sina.return_value = _make_spot_df()
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
@@ -247,7 +247,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
         self.assertIsNone(akshare_fetcher_module._hk_realtime_cache["data"])
         self.assertEqual(akshare_fetcher_module._hk_realtime_cache["last_result"], "failure")
         ak_mock.stock_hk_spot_em.assert_called_once()
-        self.assertEqual(ak_mock.stock_hk_spot.call_count, 2)
+        self.assertEqual(ak_mock.stock_hk_spot_sina.call_count, 2)
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_em_missing_code_column_falls_back_without_poisoning_cache(self, mock_cb):
@@ -259,14 +259,14 @@ class TestHKRealtimeFallback(unittest.TestCase):
             "名称": "腾讯控股",
             "最新价": 370.0,
         }])
-        ak_mock.stock_hk_spot.return_value = _make_spot_df()
+        ak_mock.stock_hk_spot_sina.return_value = _make_spot_df()
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
 
         self.assertIsNotNone(quote)
         self.assertAlmostEqual(quote.price, 368.0)
-        ak_mock.stock_hk_spot.assert_called_once()
+        ak_mock.stock_hk_spot_sina.assert_called_once()
         self.assertIsNone(akshare_fetcher_module._hk_realtime_cache["data"])
         self.assertTrue(any(source == "akshare_hk_em" for source, _ in cb.failures))
 
@@ -279,7 +279,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
             "timestamp": akshare_fetcher_module.time.time(),
         })
         ak_mock = MagicMock()
-        ak_mock.stock_hk_spot.return_value = _make_spot_df()
+        ak_mock.stock_hk_spot_sina.return_value = _make_spot_df()
         self.fetcher._set_random_user_agent = MagicMock()
         self.fetcher._enforce_rate_limit = MagicMock()
 
@@ -289,7 +289,7 @@ class TestHKRealtimeFallback(unittest.TestCase):
         self.assertIsNotNone(quote)
         self.assertAlmostEqual(quote.price, 368.0)
         ak_mock.stock_hk_spot_em.assert_not_called()
-        ak_mock.stock_hk_spot.assert_called_once()
+        ak_mock.stock_hk_spot_sina.assert_called_once()
         self.fetcher._set_random_user_agent.assert_called_once()
         self.fetcher._enforce_rate_limit.assert_called_once()
 

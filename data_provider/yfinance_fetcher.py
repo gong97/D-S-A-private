@@ -352,12 +352,18 @@ class YfinanceFetcher(BaseFetcher):
             行情字典，失败时返回 None
         """
         ticker = yf.Ticker(yf_code)
-        # 取近两日数据以计算涨跌幅
-        hist = ticker.history(period='2d')
-        if hist.empty:
+        # 取近 5 日、去掉没有收盘价的行，要有两根真实收盘才算涨跌幅。
+        # 2026-11-17 A 股复盘（北京时间 7:33 跑）：period='2d' 时 Yahoo 已建好当天还没开盘的一行（全 NaN）
+        # → 上证 / 深证 nan%；另有几个指数只回 1 行 → 昨收 = 今收，涨跌 +0.00%。宁可不给，也不给假数。
+        hist = ticker.history(period='5d')
+        if hist.empty or 'Close' not in hist:
+            return None
+        hist = hist[hist['Close'].notna() & (hist['Close'] > 0)]
+        if len(hist) < 2:
+            logger.warning(f"[Yfinance] {name}({yf_code}) 近 5 日有效收盘不足 2 根，不给涨跌幅")
             return None
         today_row = hist.iloc[-1]
-        prev_row = hist.iloc[-2] if len(hist) > 1 else today_row
+        prev_row = hist.iloc[-2]
         price = float(today_row['Close'])
         prev_close = float(prev_row['Close'])
         change = price - prev_close

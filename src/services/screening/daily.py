@@ -529,7 +529,9 @@ def _fetch_daily_akshare(code: str, *, lookback_days: int) -> pd.DataFrame:
 
     start_date = (datetime.now() - timedelta(days=max(lookback_days * 2, 90))).strftime("%Y%m%d")
     end_date = datetime.now().strftime("%Y%m%d")
-    df = ak.stock_zh_a_hist(
+    from data_provider.ak_compat import ak_api
+
+    df = ak_api(ak, "stock_zh_a_hist_em")(
         symbol=str(code).zfill(6),
         period="daily",
         start_date=start_date,

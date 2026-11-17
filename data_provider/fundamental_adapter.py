@@ -564,10 +564,12 @@ class AkshareFundamentalAdapter:
         except Exception as exc:
             return None, None, [f"import_akshare:{type(exc).__name__}"]
 
+        found = False
         for func_name, kwargs in candidates:
             fn = getattr(ak, func_name, None)
             if fn is None:
                 continue
+            found = True
             try:
                 df = fn(**kwargs)
                 if isinstance(df, pd.Series):
@@ -577,6 +579,9 @@ class AkshareFundamentalAdapter:
             except Exception as exc:
                 errors.append(f"{func_name}:{type(exc).__name__}")
                 continue
+        if not found and candidates:
+            # 一个候选都不在已装的 akshare 里（改名 / 移除）：是失败，不能当成「没有数据」
+            errors.append("akshare_function_missing:" + "|".join(name for name, _ in candidates))
         return None, None, errors
 
     def get_financial_summary(self, stock_code: str) -> Dict[str, Any]:
@@ -784,7 +789,9 @@ class AkshareFundamentalAdapter:
             "errors": [],
         }
 
-        # AkShare signature is stock_individual_fund_flow(stock, market='sh').
+        # AkShare signature is stock_individual_fund_flow(stock, market='sh'); akshare 1.20.45 renamed it to
+        # stock_fund_flow_individual_hist_em(symbol, market='sh'). Try the new name first, the old one for older
+        # installs (CI installs the latest, so the old name alone was silently skipped from 2026-11).
         # `market` is required for correctness, not just availability: omitting it
         # makes every SZ/BJ code silently return Shanghai data. Candidates that
         # take no code at all are deliberately absent -- they return AkShare's
@@ -795,6 +802,7 @@ class AkshareFundamentalAdapter:
             stock_df, stock_source, stock_errors = None, None, []
         else:
             stock_df, stock_source, stock_errors = self._call_df_candidates([
+                ("stock_fund_flow_individual_hist_em", {"symbol": _normalize_code(stock_code), "market": market}),
                 ("stock_individual_fund_flow", {"stock": _normalize_code(stock_code), "market": market}),
             ])
         result["errors"].extend(stock_errors)
@@ -813,8 +821,10 @@ class AkshareFundamentalAdapter:
 
         # stock_sector_fund_flow_rank(indicator, sector_type) -- pass both
         # explicitly so the ranking window and board type are pinned rather than
-        # inherited from AkShare's defaults.
+        # inherited from AkShare's defaults. akshare 1.20.45 renamed it to stock_fund_flow_sector_rank_em
+        # (same arguments); new name first, old name for older installs.
         sector_df, sector_source, sector_errors = self._call_df_candidates([
+            ("stock_fund_flow_sector_rank_em", {"indicator": "今日", "sector_type": "行业资金流"}),
             ("stock_sector_fund_flow_rank", {"indicator": "今日", "sector_type": "行业资金流"}),
         ])
         result["errors"].extend(sector_errors)
