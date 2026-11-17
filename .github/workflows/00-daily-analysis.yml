@@ -1,9 +1,12 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 每天北京时间 23:00 (UTC 10:00)
+  # A 股的主触发是 Macd-Qlib-Analyzer 的 Daily MACD Report 跑完后 workflow_dispatch（source=macd-report，
+  # 约美东 10:30，用的是同一天刚生成的规则判定）。2026-11-17 起。
+  # 下面的定时只作兜底：GitHub 定时实际常晚 5~8.5 小时（10-27 ~ 11-16 实测美东 14:40 ~ 18:37 才开跑），
+  # 下面 gate 任务查到当天已有成功或正在跑的 A 股运行就跳过。
   schedule:
-    - cron: '0 15 * * 1-5'     # 周一到周五，UTC 15:00 = 北京时间 23:00
+    - cron: '0 15 * * 1-5'     # 周一到周五，UTC 15:00 = 美东 10:00 / 北京时间 23:00
   
   # 手动触发
   workflow_dispatch:
@@ -22,6 +25,11 @@ on:
         required: false
         default: false
         type: boolean
+      source:
+        description: '触发来源（macd-report = Macd-Qlib 日报跑完自动触发，当天已跑过就跳过；手动留空，总是运行）'
+        required: false
+        default: ''
+        type: string
 
   # 美股由 01-daily-analysis-us.yml 调用本文件（market=us），两个市场共用同一套步骤，
   # 只有股票名单、大盘复盘区域、策略、信号记录目录和邮件主题不同。
@@ -42,7 +50,45 @@ on:
         type: boolean
 
 jobs:
+  # 去重闸门（只管 A 股）：定时兜底、Macd-Qlib 日报自动触发这两种，当天（美东日期）已有成功或正在跑的
+  # A 股运行就跳过，不重复发信。手动运行（source 留空）和美股（market=us）总是运行。
+  # 失败的运行不算：主触发失败时兜底照样跑。查不到运行记录时照常运行，宁可多发一封、不要漏发。
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MARKET: ${{ inputs.market || 'cn' }}
+          EVENT: ${{ github.event_name }}
+          SOURCE: ${{ inputs.source || '' }}
+        run: |
+          if [ "$MARKET" != "cn" ]; then echo "美股，总是运行"; echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$SOURCE" != "macd-report" ]; then
+            echo "手动运行，总是运行"; echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          today=$(TZ=America/New_York date +%F)
+          since=$(date -u -d "@$(TZ=America/New_York date -d "$today 00:00" +%s)" +%Y-%m-%dT%H:%M:%SZ)
+          if ! others=$(gh api "repos/${{ github.repository }}/actions/workflows/00-daily-analysis.yml/runs?created=>=$since&per_page=50" --jq '.workflow_runs[] | select(.id != ${{ github.run_id }})
+                      | select(.conclusion == "success" or .status == "in_progress" or .status == "queued" or .status == "waiting")
+                      | "\(.id) \(.event) \(.status) \(.conclusion) \(.created_at)"'); then
+            echo "::warning::查不到今天的运行记录，照常运行（可能多发一封）"; echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -n "$others" ]; then
+            echo "美东 $today 已有 A 股运行，跳过（触发：$EVENT ${SOURCE}）："; echo "$others"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "美东 $today 还没有 A 股运行，照常运行（触发：$EVENT ${SOURCE}）"; echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   analyze:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     # 并发控制：同一时间只运行一个分析任务（A 股与美股共用一个组，排队不取消）。
     # 放在 job 上而不是文件顶层：本文件也会被 01-daily-analysis-us.yml 调用。
