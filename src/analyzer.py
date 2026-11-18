@@ -3444,6 +3444,8 @@ class GeminiAnalyzer:
             generation_config = {
                 "temperature": config.llm_temperature,
                 "max_output_tokens": 8192,
+                # 不设就是 LiteLLM 默认 6000 秒，一次卡住的请求能拖垮整次运行（见 Config.llm_analysis_timeout_sec）
+                "timeout": getattr(config, "llm_analysis_timeout_sec", 120.0),
             }
 
             logger.info(f"[LLM调用] 开始调用 {model_name}...")

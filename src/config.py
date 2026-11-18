@@ -910,6 +910,11 @@ class Config:
     # Unified temperature for all LLM calls (LLM_TEMPERATURE); legacy per-provider temps are fallback only
     llm_temperature: float = 0.7
 
+    # 个股分析单次 LLM 请求超时（LLM_ANALYSIS_TIMEOUT_SEC，2026-11-18 起）。原来不设，用 LiteLLM 默认 6000 秒：
+    # 11-17 美东上午 Gemini 大量 503 high demand，有一次请求卡住不返回，把整次 45 分钟的运行拖到超时取消。
+    # 平时一次 6 秒左右，那天上午成功的最慢 330 秒。超时后按原有逻辑换备选模型。
+    llm_analysis_timeout_sec: float = 120.0
+
     # Provider prompt-cache controls. These do not control provider implicit cache.
     llm_prompt_cache_telemetry_enabled: bool = True
     llm_prompt_cache_hints_enabled: bool = False
@@ -1824,6 +1829,10 @@ class Config:
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),
+            llm_analysis_timeout_sec=parse_env_float(
+                os.getenv('LLM_ANALYSIS_TIMEOUT_SEC'), 120.0,
+                field_name='LLM_ANALYSIS_TIMEOUT_SEC', minimum=10.0,
+            ),
             litellm_config_path=litellm_config_path,
             llm_models_source=llm_models_source,
             llm_channels=llm_channels,
