@@ -29,10 +29,8 @@ on:
 
 jobs:
   analyze:
-    # actions: read 给被调用文件里的 gate 任务（它对美股直接放行，但被调用的 job 申请的权限不能超过这里给的）
     permissions:
       contents: write
-      actions: read
     uses: ./.github/workflows/00-daily-analysis.yml
     with:
       market: us
