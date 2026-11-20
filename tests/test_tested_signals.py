@@ -16,6 +16,19 @@ def test_known_invalid_reasons_are_annotated() -> None:
     assert tested_notes("中报归母净利润同比大增68.17%") == ["已公布的业绩在公告窗口内就被消化，之后没有漂移"]
 
 
+def test_platform_retest_reasons_are_annotated() -> None:
+    """platform-retest（2026-11-19）：A 股回踩之后跑输，美股没有方向；回踩均线不在此列。"""
+    cn = "平台突破后回踩守住，之后 10 / 20 日反而跑输"
+    assert tested_notes("放量突破平台后回踩确认，上沿支撑有效") == [cn, "突破确认之后没有优势"]
+    assert tested_notes("回踩前高不破") == [cn]
+    assert tested_notes("回踩确认完成，量能温和") == [cn]
+    assert tested_notes("缩量回踩前期平台") == ["缩量回踩的缩量条件历史上方向相反", cn]
+    # 回踩均线（技巧一）不标这一条
+    assert tested_notes("回踩20日线获支撑") == []
+    assert tested_notes("回踩确认MA20支撑") == []
+    assert tested_notes("回踩前高不破", market="us") == ["突破后回踩在美股没有方向信息"]
+
+
 def test_valuation_and_neutral_facts_are_not_annotated() -> None:
     assert tested_notes("经营现金流稳健，估值处于合理区间") == []
     assert tested_notes("公司发布关于回购公司股份进展的公告") == []
