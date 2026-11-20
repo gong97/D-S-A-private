@@ -29,6 +29,23 @@ def test_platform_retest_reasons_are_annotated() -> None:
     assert tested_notes("回踩前高不破", market="us") == ["突破后回踩在美股没有方向信息"]
 
 
+def test_head_and_shoulders_reasons_are_annotated() -> None:
+    """head-shoulders（2026-11-20）：头肩底突破之后跑输（看多理由标反）；头肩顶跌破之后跑输（看空理由标成立）。"""
+    bottom = "头肩底突破颈线之后 10 / 20 日反而跑输"
+    top = "头肩顶跌破颈线之后 10 / 20 日确实跑输，看空成立"
+    assert tested_notes("日线构筑头肩底，放量突破颈线") == [bottom, "突破确认之后没有优势"]
+    assert tested_notes("倒头肩形态右肩企稳") == [bottom]
+    assert tested_notes("周线头肩顶形态成型，跌破颈线", bearish=True) == [top]
+    assert tested_notes("头肩顶跌破颈线且均线空头排列", bearish=True) == [
+        top, "空头排列 / 跌破均线之后不继续跑输，不作减仓或卖出依据"]
+    # 只写「跌破颈线」（可能是双顶等）不标；头肩顶不出现在看多规则里
+    assert tested_notes("双顶跌破颈线", bearish=True) == []
+    assert tested_notes("头肩顶形态成型") == []
+    # 美股没有单独检验头肩顶；头肩底沿用美股形态规则
+    assert tested_notes("头肩顶形态成型", market="us", bearish=True) == []
+    assert tested_notes("头肩底形态", market="us") == ["形态与突破在美股没有方向信息"]
+
+
 def test_valuation_and_neutral_facts_are_not_annotated() -> None:
     assert tested_notes("经营现金流稳健，估值处于合理区间") == []
     assert tested_notes("公司发布关于回购公司股份进展的公告") == []
