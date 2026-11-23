@@ -105,7 +105,7 @@ def test_new_high_reasons_are_annotated() -> None:
     assert tested_notes("业绩稳健，股价创新高") == []  # 同句前面有业绩词，宁可少标
     assert tested_notes("站上前高") == []
     assert tested_notes("放量突破前高") == [brk]
-    # 美股没测过，只走美股形态规则
+    # 美股复现不成立（US c0ecb77），只走美股形态规则
     assert tested_notes("股价创52周新高", market="us") == []
     assert tested_notes("突破历史高点", market="us") == ["形态与突破在美股没有方向信息"]
 
