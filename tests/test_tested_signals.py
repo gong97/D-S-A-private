@@ -86,6 +86,30 @@ def test_triangle_reasons_are_annotated() -> None:
     assert tested_notes("上升三角形整理", market="us") == ["形态与突破在美股没有方向信息"]
 
 
+def test_new_high_reasons_are_annotated() -> None:
+    """high52-breakout（2026-11-23 更正为成立）：股价创 52 周 / 历史新高之后 20 / 60 日反而跑输。"""
+    hi = "收盘创 52 周新高之后 20 / 60 日反而跑输（多是之前已急涨）"
+    brk = "突破确认之后没有优势"
+    assert tested_notes("股价创52周新高，趋势强劲") == [hi]
+    assert tested_notes("收盘价创出新高") == [hi]
+    assert tested_notes("创历史新高，上方无套牢盘") == [hi]
+    assert tested_notes("放量突破年内高点") == [hi, brk]
+    assert tested_notes("趋势向上，股价创上市以来新高") == [hi]
+    assert tested_notes("股价创新高，成交量同步放大") == [hi]
+    # 不标：基本面 / 成交量创新高、接近新高、单写前高、阶段 / 近期新高
+    assert tested_notes("净利润同比增长 35%，创历史新高") == []
+    assert tested_notes("三季度营收创历史新高") == []
+    assert tested_notes("成交额创年内新高") == []
+    assert tested_notes("股价接近 52 周新高") == []
+    assert tested_notes("创阶段新高") == []
+    assert tested_notes("业绩稳健，股价创新高") == []  # 同句前面有业绩词，宁可少标
+    assert tested_notes("站上前高") == []
+    assert tested_notes("放量突破前高") == [brk]
+    # 美股没测过，只走美股形态规则
+    assert tested_notes("股价创52周新高", market="us") == []
+    assert tested_notes("突破历史高点", market="us") == ["形态与突破在美股没有方向信息"]
+
+
 def test_valuation_and_neutral_facts_are_not_annotated() -> None:
     assert tested_notes("经营现金流稳健，估值处于合理区间") == []
     assert tested_notes("公司发布关于回购公司股份进展的公告") == []
