@@ -64,17 +64,26 @@ def test_double_top_bottom_reasons_are_annotated() -> None:
 
 
 def test_triangle_reasons_are_annotated() -> None:
-    """pennant-triangle（2026-11-22）：收敛 / 对称三角形标反；上升三角形、三角旗没有专门标注。"""
+    """pennant-triangle / flag-ascending-triangle（2026-11-22）：收敛 / 对称三角形、上升三角形各自标反；
+    三角旗、旗形不成立，下降三角形没测过，都没有专门标注。"""
     tri = "收敛三角形向上突破之后 10 / 20 日反而跑输"
-    assert tested_notes("日线收敛三角形整理末端，放量突破上轨") == [tri, "突破确认之后没有优势"]
+    asc = "上升三角形向上突破之后 10 / 20 日反而跑输"
+    brk = "突破确认之后没有优势"
+    assert tested_notes("日线收敛三角形整理末端，放量突破上轨") == [tri, brk]
     assert tested_notes("对称三角形即将选择方向") == [tri]
     assert tested_notes("股价处于三角形整理中") == [tri]
     assert tested_notes("三角收敛接近尾声") == [tri]
-    # 上升三角形没测过；三角旗不成立，只按「突破」标
-    assert tested_notes("上升三角形整理") == []
-    assert tested_notes("三角旗形向上突破") == ["突破确认之后没有优势"]
-    # 美股沿用美股形态规则
+    # 上升三角形单独一条，不落进收敛三角形
+    assert tested_notes("上升三角形整理") == [asc]
+    assert tested_notes("构筑上升三角形，放量突破水平压力线") == [asc, brk]
+    assert tested_notes("上升三角整理接近尾声") == [asc]
+    # 三角旗（含「上升三角旗」）、旗形不成立，只按「突破」标；下降三角形没测过
+    assert tested_notes("三角旗形向上突破") == [brk]
+    assert tested_notes("上升三角旗形向上突破") == [brk]
+    assert tested_notes("下降三角形整理") == []
+    # 美股沿用美股形态规则（两种三角形美股都不复现）
     assert tested_notes("收敛三角形整理", market="us") == ["形态与突破在美股没有方向信息"]
+    assert tested_notes("上升三角形整理", market="us") == ["形态与突破在美股没有方向信息"]
 
 
 def test_valuation_and_neutral_facts_are_not_annotated() -> None:
