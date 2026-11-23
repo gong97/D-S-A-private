@@ -48,7 +48,7 @@ def test_head_and_shoulders_reasons_are_annotated() -> None:
 
 def test_double_top_bottom_reasons_are_annotated() -> None:
     """double-top-bottom（2026-11-20）：双底提到就标反；双顶只在跌破时标成立，没跌破的不标。"""
-    bottom = "双底（W 底）突破颈线之后 10 / 20 日反而跑输"
+    bottom = "双底（W 底）突破颈线之后反而跑输：日线看 20 日、周线看 60 日，平均少赚约 1 至 2.5 个百分点，约六成跑输"
     top = "双顶跌破颈线之后 20 日确实跑输（10 日不显著），看空成立"
     assert tested_notes("日线双底成型，放量突破颈线") == [bottom, "突破确认之后没有优势"]
     assert tested_notes("W底右侧企稳") == [bottom]
@@ -88,7 +88,7 @@ def test_triangle_reasons_are_annotated() -> None:
 
 def test_new_high_reasons_are_annotated() -> None:
     """high52-breakout（2026-11-23 更正为成立）：股价创 52 周 / 历史新高之后 20 / 60 日反而跑输。"""
-    hi = "收盘创 52 周新高之后 20 / 60 日反而跑输（多是之前已急涨）"
+    hi = "收盘创 52 周新高之后反而跑输：20 / 60 日平均少赚约 1 / 2 个百分点，约六成跑输（多是之前已急涨）"
     brk = "突破确认之后没有优势"
     assert tested_notes("股价创52周新高，趋势强劲") == [hi]
     assert tested_notes("收盘价创出新高") == [hi]
