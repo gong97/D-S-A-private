@@ -21,7 +21,8 @@
     holdings    持仓：action = exit（卖出参考）/ conditional_exit（等重新打分）/ trim（减到上限）/ hold（不动）
                 2026-11-25 起分核心 / 卫星（Macd-Qlib portfolio/policy.json）：卫星另有单只上限，cap 取两者中
                 较小的；超出的只在自身涨出的反弹日分批减——这时 trim 的 target_weight 高于 cap（这次只减一部分），
-                没到反弹日的是 hold 且 satellite_wait = true（标签「不动（等反弹减）」）
+                没到反弹日的是 hold 且 satellite_wait = true（标签「不动（等反弹减）」）；
+                核心合计低于目标下限时，当天卫星卖出的钱买核心：action = add（补核心），shares / limit 是买单
     watch       关注名单：status = buy（可以买）/ wait（等重新打分）/ no_buy（不买）/ unknown（未核对）
 取目录里日期最新的一份。DSA 夜里跑时它通常已经提交（score_date = 当天）；还没提交时用前一份，表下注明依据日期。
 
@@ -53,7 +54,7 @@ REMOTE_DIR = "portfolio/rule_actions"
 TIMEOUT_SEC = 15
 MAX_AGE_DAYS = 7  # score_date 超过一周的判定不再引用（CI 断了几天时宁可不显示）
 
-HOLDING_LABEL = {"exit": "卖出参考", "conditional_exit": "等重新打分", "trim": "减到上限", "hold": "不动"}
+HOLDING_LABEL = {"exit": "卖出参考", "conditional_exit": "等重新打分", "trim": "减到上限", "add": "补核心", "hold": "不动"}
 SATELLITE_WAIT_LABEL = "不动（等反弹减）"  # hold 且 satellite_wait：卫星超出上限，等反弹日分批减（不在下跌日卖）
 WATCH_LABEL = {"buy": "可以买", "wait": "等重新打分", "no_buy": "不买", "unknown": "未核对"}
 SOURCE = "Macd-Qlib 规则操作单"
@@ -207,6 +208,8 @@ def conflicts(entry: Optional[Dict[str, Any]], action: Optional[str]) -> bool:
             return action in _SELLS
         if value in ("exit", "trim"):
             return action not in _SELLS
+        if value == "add":
+            return action in _SELLS
         if value == "conditional_exit":
             return action in _BUYS
         return False
@@ -222,6 +225,8 @@ def short_text(entry: Optional[Dict[str, Any]]) -> str:
         text += "（" + "、".join(entry["exits"][:2]) + "）"
     elif entry["value"] == "trim" and entry.get("shares"):
         text += f"（卖 {int(entry['shares']):,} 股）"
+    elif entry["value"] == "add" and entry.get("shares"):
+        text += f"（买 {int(entry['shares']):,} 股）"
     if entry.get("declined"):
         text += "·已决定暂不执行"
     return text
@@ -246,6 +251,9 @@ def position_text(entry: Optional[Dict[str, Any]]) -> str:
             text = f"规则未判定（{now}），不加仓"
         elif cap is None:
             text = f"上限未算出（{now}），不加仓"
+        elif value == "add":
+            limit = f"，限价 {entry['limit']}" if entry.get("limit") else ""
+            text = f"规则：补核心，卫星卖单成交后买 {int(entry.get('shares') or 0):,} 股{limit}（{now}，上限 {_pct(cap)}）"
         elif value == "trim":
             target = entry.get("target_weight")
             if target is not None and target > cap + 0.0005:  # 卫星分批减：这次只减超出部分的一半

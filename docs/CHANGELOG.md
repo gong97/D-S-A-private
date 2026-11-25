@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [改进] A 股持仓认出 Macd-Qlib 规则操作单的新判定「补核心」（action = add）：核心仓合计低于目标下限时，当天卫星卖单卖出的钱在卖单成交后买核心。判定列显示「补核心」，总览格写「补核心（买 N 股）」，「建议仓位」写「规则：补核心，卫星卖单成交后买 N 股，限价 P（当前 Y%，上限 X%）」；当天 LLM 给卖出 / 减仓时标冲突。
 - [改进] A 股持仓的「建议仓位」配合 Macd-Qlib 的核心 / 卫星仓位（2026-11-25 起，`portfolio/policy.json`）：卫星另有单只上限，超出的只在自身涨出的反弹日分批减。没到反弹日的判定显示「不动（等反弹减）」，仓位写「上限 X%，当前 Y%，超出部分等反弹日分批减，不加仓」；反弹日只减一部分时写「分批减：这次卖 N 股（到约 Z%）」，不再误写成「减到上限需卖 N 股」。`src/rule_actions.py` 新读 `target_weight`、`satellite_wait`（旧文件没有时按原样显示），字段契约同步加进 Macd-Qlib-Analyzer 的 `tests/test_dsa_contract.py`。
 - [chore] 读 Macd-Qlib-Analyzer 产出的五个模块（估值红旗、规则操作单、近 5 日涨幅分界线、本机资讯源、持仓名单脚本）在说明里注明：字段契约由那边的 `tests/test_dsa_contract.py` 盯住，改读的字段名要两边同步。
 - [改进] A 股持仓的「建议仓位」换成规则操作单的仓位上限。模型写的「建议仓位：X 成」没有计算口径（提示词只给了模板），CI 运行也不把实际持仓传给模型；现在由 `src/rule_actions.py` 改写为「上限 X%，当前 Y%，已到上限 / 可加到上限 / 减到上限需卖 N 股」，卖出参考写「目标 0%」，关注名单写「上限、最多 N 股、限价」或「不建仓」，末尾标〔Macd-Qlib 规则操作单 日期〕。上限 = policy.max_worst_year_drag ÷ |一年内最深跌幅|（Macd-Qlib-Analyzer portfolio_scan.py）；需要 Macd-Qlib 的操作单带 `cap` 字段（同日加上），旧文件写「上限未算出，不加仓」。在大盘红灯软化之后执行，以它为准。提示词同时给出这一句。

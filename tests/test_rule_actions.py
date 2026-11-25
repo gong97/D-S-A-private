@@ -173,3 +173,19 @@ def test_satellite_wait_and_batch_trim_text():
     assert ra.conflicts(wait, "sell")  # 不在下跌日卖：LLM 给卖照样标冲突
     batch = ra.rule_action_for("600900", TODAY)
     assert ra.position_text(batch).startswith("上限 15.0%，当前 25.0%，分批减：这次卖 500 股（到约 20.0%）")
+
+
+def test_core_add_label_text_and_conflict():
+    """补核心：核心合计低于目标下限时，当天卫星卖出的钱买核心（action = add）。"""
+    payload = json.loads(json.dumps(PAYLOAD))
+    payload["holdings"][2].update(action="add", shares=500, limit=30.0, cap=0.25, weight=0.12,
+                                  why="核心合计 30.0% 低于目标下限 50%：今天卫星卖单约 15,000 元，卖单成交后补核心")
+    import os
+    with open(os.environ[ra.ENV_FILE], "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+    ra.reset_cache()
+    e = ra.rule_action_for("600900", TODAY)
+    assert (e["value"], e["label"]) == ("add", "补核心")
+    assert ra.position_text(e).startswith("规则：补核心，卫星卖单成交后买 500 股，限价 30.0（当前 12.0%，上限 25.0%）")
+    assert ra.short_text(e) == "补核心（买 500 股）"
+    assert ra.conflicts(e, "sell") and ra.conflicts(e, "reduce") and not ra.conflicts(e, "buy")
