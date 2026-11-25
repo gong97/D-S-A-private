@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [改进] A 股持仓的「建议仓位」配合 Macd-Qlib 的核心 / 卫星仓位（2026-11-25 起，`portfolio/policy.json`）：卫星另有单只上限，超出的只在自身涨出的反弹日分批减。没到反弹日的判定显示「不动（等反弹减）」，仓位写「上限 X%，当前 Y%，超出部分等反弹日分批减，不加仓」；反弹日只减一部分时写「分批减：这次卖 N 股（到约 Z%）」，不再误写成「减到上限需卖 N 股」。`src/rule_actions.py` 新读 `target_weight`、`satellite_wait`（旧文件没有时按原样显示），字段契约同步加进 Macd-Qlib-Analyzer 的 `tests/test_dsa_contract.py`。
 - [chore] 读 Macd-Qlib-Analyzer 产出的五个模块（估值红旗、规则操作单、近 5 日涨幅分界线、本机资讯源、持仓名单脚本）在说明里注明：字段契约由那边的 `tests/test_dsa_contract.py` 盯住，改读的字段名要两边同步。
 - [改进] A 股持仓的「建议仓位」换成规则操作单的仓位上限。模型写的「建议仓位：X 成」没有计算口径（提示词只给了模板），CI 运行也不把实际持仓传给模型；现在由 `src/rule_actions.py` 改写为「上限 X%，当前 Y%，已到上限 / 可加到上限 / 减到上限需卖 N 股」，卖出参考写「目标 0%」，关注名单写「上限、最多 N 股、限价」或「不建仓」，末尾标〔Macd-Qlib 规则操作单 日期〕。上限 = policy.max_worst_year_drag ÷ |一年内最深跌幅|（Macd-Qlib-Analyzer portfolio_scan.py）；需要 Macd-Qlib 的操作单带 `cap` 字段（同日加上），旧文件写「上限未算出，不加仓」。在大盘红灯软化之后执行，以它为准。提示词同时给出这一句。
 - [新功能] A 股持仓日报接入 Macd-Qlib 的持仓规则判定。新增 `src/rule_actions.py`：运行时用只读 token 读私有仓库 Macd-Qlib-Analyzer `portfolio/rule_actions/` 里日期最新的一份（`scripts/portfolio_rules.py` 按研究台账算出的持仓「卖出参考 / 等重新打分 / 减到上限 / 不动」与关注名单「可以买 / 不买 / 等重新打分」，依据日超过 7 天不用），写进提示词并要求操作建议以它为准（规则看不到的新事件除外，须写明是哪件事），同时写明评分不因此调整；「今日持仓决策」总览表新增「规则判定」列（原「动作」改称「LLM 动作」），两者方向相反时标 ⚠️，规则要卖的排最前，表下注明来源与依据日期。不改评分、不改模型的动作。起因：检验成立的卖出 / 不买规则（ML 后 20%、中小盘危险信号、仓位上限等）DSA 原来看不到，两封邮件可能结论相反；而 LLM 评分扣掉近期涨跌后没有信息（Macd-Qlib-Analyzer dsa-score-forward）。没有 token 时整段跳过；本地调试用 `RULE_ACTIONS_FILE`。

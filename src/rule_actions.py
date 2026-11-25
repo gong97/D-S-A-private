@@ -19,6 +19,9 @@
     date        这份判定用于哪个交易日开盘
     score_date  依据哪天收盘
     holdings    持仓：action = exit（卖出参考）/ conditional_exit（等重新打分）/ trim（减到上限）/ hold（不动）
+                2026-11-25 起分核心 / 卫星（Macd-Qlib portfolio/policy.json）：卫星另有单只上限，cap 取两者中
+                较小的；超出的只在自身涨出的反弹日分批减——这时 trim 的 target_weight 高于 cap（这次只减一部分），
+                没到反弹日的是 hold 且 satellite_wait = true（标签「不动（等反弹减）」）
     watch       关注名单：status = buy（可以买）/ wait（等重新打分）/ no_buy（不买）/ unknown（未核对）
 取目录里日期最新的一份。DSA 夜里跑时它通常已经提交（score_date = 当天）；还没提交时用前一份，表下注明依据日期。
 
@@ -51,6 +54,7 @@ TIMEOUT_SEC = 15
 MAX_AGE_DAYS = 7  # score_date 超过一周的判定不再引用（CI 断了几天时宁可不显示）
 
 HOLDING_LABEL = {"exit": "卖出参考", "conditional_exit": "等重新打分", "trim": "减到上限", "hold": "不动"}
+SATELLITE_WAIT_LABEL = "不动（等反弹减）"  # hold 且 satellite_wait：卫星超出上限，等反弹日分批减（不在下跌日卖）
 WATCH_LABEL = {"buy": "可以买", "wait": "等重新打分", "no_buy": "不买", "unknown": "未核对"}
 SOURCE = "Macd-Qlib 规则操作单"
 
@@ -163,6 +167,8 @@ def rule_action_for(code: Any, today: Optional[date] = None) -> Optional[Dict[st
     if kind == "holding":
         value = "unknown" if row.get("data_missing") else str(row.get("action") or "hold")
         label = "未判定" if value == "unknown" else HOLDING_LABEL.get(value, value)
+        if value == "hold" and row.get("satellite_wait"):
+            label = SATELLITE_WAIT_LABEL
     else:
         value = str(row.get("status") or "unknown")
         label = WATCH_LABEL.get(value, value)
@@ -176,6 +182,8 @@ def rule_action_for(code: Any, today: Optional[date] = None) -> Optional[Dict[st
         "limit": row.get("limit"),
         "cap": _num(row.get("cap")),
         "weight": _num(row.get("weight")) if kind == "holding" else None,
+        "target_weight": _num(row.get("target_weight")) if kind == "holding" else None,
+        "satellite_wait": bool(row.get("satellite_wait")) if kind == "holding" else False,
         "max_shares": int(row.get("max_shares") or 0) if kind == "watch" else 0,
         "declined": declined,
         "date": payload.get("date", ""), "score_date": payload.get("score_date", ""),
@@ -239,7 +247,13 @@ def position_text(entry: Optional[Dict[str, Any]]) -> str:
         elif cap is None:
             text = f"上限未算出（{now}），不加仓"
         elif value == "trim":
-            text = f"上限 {_pct(cap)}，{now}，减到上限需卖 {int(entry.get('shares') or 0):,} 股"
+            target = entry.get("target_weight")
+            if target is not None and target > cap + 0.0005:  # 卫星分批减：这次只减超出部分的一半
+                text = f"上限 {_pct(cap)}，{now}，分批减：这次卖 {int(entry.get('shares') or 0):,} 股（到约 {_pct(target)}）"
+            else:
+                text = f"上限 {_pct(cap)}，{now}，减到上限需卖 {int(entry.get('shares') or 0):,} 股"
+        elif entry.get("satellite_wait"):
+            text = f"上限 {_pct(cap)}，{now}，超出部分等反弹日分批减，不加仓"
         else:
             room = "已到上限，不加仓" if (entry.get("weight") or 0) >= cap else "可加到上限"
             text = f"上限 {_pct(cap)}，{now}，{room}"

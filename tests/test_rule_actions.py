@@ -154,3 +154,22 @@ def test_apply_replaces_model_position_and_old_file_without_cap():
     assert result.dashboard["battle_plan"]["position_strategy"]["suggested_position"].startswith(
         "上限未算出（当前 20.4%），不加仓")
     assert "仓位：上限未算出" in ra.render_rule_action_prompt(ra.rule_action_for("300750", TODAY))
+
+
+def test_satellite_wait_and_batch_trim_text():
+    """2026-11-25 起卫星超出上限：没到反弹日是 hold + satellite_wait；反弹日 trim 只减一部分（target_weight 高于 cap）。"""
+    payload = json.loads(json.dumps(PAYLOAD))
+    payload["holdings"][0].update(cap=0.15, weight=0.25, satellite_wait=True,
+                                  why="卫星仓位 25.0% 超过卫星上限 15%，等自身涨出的近 5 日涨幅居前再分批减，不在下跌日卖")
+    payload["holdings"][2].update(cap=0.15, weight=0.25, shares=500, target_weight=0.20)
+    import os
+    with open(os.environ[ra.ENV_FILE], "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+    ra.reset_cache()
+    wait = ra.rule_action_for("300750", TODAY)
+    assert (wait["value"], wait["label"]) == ("hold", "不动（等反弹减）")
+    assert ra.position_text(wait).startswith("上限 15.0%，当前 25.0%，超出部分等反弹日分批减，不加仓")
+    assert ra.short_text(wait) == "不动（等反弹减）"
+    assert ra.conflicts(wait, "sell")  # 不在下跌日卖：LLM 给卖照样标冲突
+    batch = ra.rule_action_for("600900", TODAY)
+    assert ra.position_text(batch).startswith("上限 15.0%，当前 25.0%，分批减：这次卖 500 股（到约 20.0%）")
